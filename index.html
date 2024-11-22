@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Punggol HDB Prices & Volume</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .chart-container {
+            width: 90%;
+            height: calc(90vw * 9/16);
+            margin: 20px auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="chart-container">
+        <canvas id="myChart"></canvas>
+    </div>
+
+    <script>
+        const data = {
+            labels: ['Jan-18','Feb-18','Mar-18','Apr-18','May-18','Jun-18','Jul-18','Aug-18','Sep-18','Oct-18','Nov-18','Dec-18','Jan-19','Feb-19','Mar-19','Apr-19','May-19','Jun-19','Jul-19','Aug-19','Sep-19','Oct-19','Nov-19','Dec-19','Jan-20','Feb-20','Mar-20','Apr-20','May-20','Jun-20','Jul-20','Aug-20','Sep-20','Oct-20','Nov-20','Dec-20','Jan-21','Feb-21','Mar-21','Apr-21','May-21','Jun-21','Jul-21','Aug-21','Sep-21','Oct-21','Nov-21','Dec-21','Jan-22','Feb-22','Mar-22','Apr-22','May-22','Jun-22','Jul-22','Aug-22','Sep-22','Oct-22','Nov-22','Dec-22','Jan-23','Feb-23','Mar-23','Apr-23','May-23','Jun-23','Jul-23','Aug-23','Sep-23','Oct-23','Nov-23','Dec-23','Jan-24','Feb-24','Mar-24','Apr-24','May-24','Jun-24','Jul-24','Aug-24','Sep-24','Oct-24','Nov-24'],
+            prices: [452734,453106,441663,448256,449995,435135,451281,441636,459984,453545,442242,472814,465756,452960,468430,458258,465496,466436,458661,474212,464904,443144,457001,458474,460209,452527,455203,487022,464206,438287,456710,468506,469912,478368,482822,487370,493042,492469,500774,506334,508850,502855,507308,524470,516480,530956,539548,540967,527579,536865,533447,560975,547046,563261,570556,558165,585239,598395,576923,589591,577844,567776,566662,581339,588559,606166,597012,599304,603519,609655,604400,608374,606976,631882,630178,613937,594681,657415,640616,646000,660722,661974,652729],
+            volumes: [82,91,151,124,138,141,189,138,140,122,115,103,90,73,86,116,109,105,103,91,81,98,102,104,99,82,125,30,28,142,204,184,208,202,225,216,235,206,231,229,189,232,243,276,234,221,220,216,206,133,165,178,148,162,187,127,197,148,170,184,200,163,187,187,181,181,160,189,149,181,164,141,99,86,87,87,58,72,101,93,162,169,87]
+        };
+
+        const ctx = document.getElementById('myChart').getContext('2d');
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: data.labels,
+                datasets: [{
+                    type: 'bar',
+                    label: 'Average Price',
+                    data: data.prices,
+                    backgroundColor: '#e86225',
+                    order: 2,
+                    yAxisID: 'y'
+                }, {
+                    type: 'line',
+                    label: 'Volume',
+                    data: data.volumes,
+                    borderColor: '#263237',
+                    borderWidth: 2,
+                    pointRadius: 2,
+                    order: 1,
+                    yAxisID: 'y1'
+                }]
+            },
+            options: {
+                maintainAspectRatio: true,
+                responsive: true,
+                animation: {
+                    duration: 1500,
+                    easing: 'easeInOutQuart'
+                },
+                plugins: {
+                    tooltip: {
+                        backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                        titleColor: '#000',
+                        bodyColor: '#000',
+                        titleFont: {
+                            size: 16
+                        },
+                        bodyFont: {
+                            size: 14
+                        },
+                        padding: 15,
+                        displayColors: true,
+                        callbacks: {
+                            label: function(context) {
+                                if(context.dataset.label === "Average Price") {
+                                    return `Price: $${context.raw.toLocaleString('en-US', {maximumFractionDigits: 0})}`;
+                                } else {
+                                    return `Volume: ${context.raw} units`;
+                                }
+                            }
+                        }
+                    },
+                    legend: {
+                        position: 'top',
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: {
+                            display: false
+                        },
+                        ticks: {
+                            maxRotation: 45,
+                            minRotation: 45
+                        }
+                    },
+                    y: {
+                        position: 'left',
+                        grid: {
+                            display: false
+                        },
+                        title: {
+                            display: true,
+                            text: 'Average Price (SGD)',
+                            color: '#e86225'
+                        },
+                        ticks: {
+                            callback: function(value) {
+                                return '$' + value.toLocaleString('en-US', {maximumFractionDigits: 0});
+                            }
+                        }
+                    },
+                    y1: {
+                        position: 'right',
+                        grid: {
+                            display: false
+                        },
+                        title: {
+                            display: true,
+                            text: 'Volume (Units)',
+                            color: '#263237'
+                        }
+                    }
+                }
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Ohmyhome Primary School Proximity Finder</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        #map {
+            height: 400px;
+            margin: 20px 0;
+        }
+        .input-group {
+            margin-bottom: 20px;
+        }
+        input[type="text"] {
+            padding: 8px;
+            width: 300px;
+            margin-right: 10px;
+        }
+        button {
+            padding: 8px 15px;
+            background-color: #FF9800;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        .results {
+            display: flex;
+            gap: 20px;
+        }
+        .school-list {
+            flex: 1;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .school-list h3 {
+            margin-top: 0;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 8px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        .legend {
+            padding: 10px;
+            background: white;
+            border-radius: 5px;
+            box-shadow: 0 0 15px rgba(0,0,0,0.2);
+        }
+        .legend i {
+            width: 18px;
+            height: 18px;
+            float: left;
+            margin-right: 8px;
+            opacity: 0.7;
+        }
+        .custom-icon {
+            text-align: center;
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .school-label {
+            background: rgba(255, 255, 255, 0.9);
+            border: none;
+            border-radius: 4px;
+            padding: 4px 8px;
+            font-size: 12px;
+            white-space: nowrap;
+            width: auto !important;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .school-label:hover {
+            background: rgba(255, 255, 255, 1);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+        }
+    </style>
+</head>
+<body>
+    <h1>Ohmyhome Primary School Proximity Finder</h1>
+    <div class="input-group">
+        <input type="text" id="address" placeholder="Enter address or postal code">
+        <button onclick="searchAddress()">Search</button>
+    </div>
+    <div id="map"></div>
+    <div class="results">
+        <div class="school-list">
+            <h3>Schools within 1km</h3>
+            <div id="schools1km"></div>
+        </div>
+        <div class="school-list">
+            <h3>Schools within 2km</h3>
+            <div id="schools2km"></div>
+        </div>
+    </div>
+    
+<script>
+        let map = L.map('map', {
+            zoomControl: true,
+            maxZoom: 18
+        }).setView([1.3521, 103.8198], 12);
+
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(map);
+
+        let markers = [];
+        let labels = [];
+
+        const homeIcon = L.divIcon({
+            html: '<i class="fas fa-home fa-2x" style="color: #000;"></i>',
+            className: 'custom-icon',
+            iconSize: [30, 30],
+            iconAnchor: [15, 15]
+        });
+
+        function getSchoolIcon(color, zoom) {
+            const size = Math.max(24, Math.min(36, zoom * 2));
+            return L.divIcon({
+                html: `<i class="fas fa-school" style="color: ${color}; font-size: ${size}px;"></i>`,
+                className: 'custom-icon',
+                iconSize: [size, size],
+                iconAnchor: [size/2, size/2]
+            });
+        }
+
+        const legend = L.control({position: 'bottomright'});
+        legend.onAdd = function(map) {
+            const div = L.DomUtil.create('div', 'legend');
+            div.innerHTML = `
+                <div><i class="fas fa-home" style="color: #000;"></i> Your Location</div>
+                <div><i class="fas fa-school" style="color: #2196F3;"></i> Schools within 1km</div>
+                <div><i class="fas fa-school" style="color: #FF9800;"></i> Schools within 2km</div>
+            `;
+            return div;
+        };
+        legend.addTo(map);
+
+        const schools = [
+{name: "First Toa Payoh Primary School", longitude: 103.85552990000001, latitude: 1.340322995},
+            {name: "De La Salle School", longitude: 103.7432018, latitude: 1.39470783},
+            {name: "Concord Primary School", longitude: 103.73622540000001, latitude: 1.380008062},
+            {name: "Yumin Primary School", longitude: 103.95046190000001, latitude: 1.351291777},
+            {name: "Sembawang Primary School", longitude: 103.8210215, latitude: 1.445043644},
+            {name: "Changkat Primary School", longitude: 103.9520801, latitude: 1.34023164},
+            {name: "Yuhua Primary School", longitude: 103.7411082, latitude: 1.342802328},
+            {name: "Balestier Hill Primary School", longitude: 103.8444308, latitude: 1.3256019270000001},
+            {name: "Kranji Primary School", longitude: 103.7471625, latitude: 1.3935648459999999},
+            {name: "Evergreen Primary School", longitude: 103.79458120000001, latitude: 1.4441506430000002},
+            {name: "Tanjong Katong Primary School", longitude: 103.90012829999999, latitude: 1.305281774},
+            {name: "Paya Lebar Methodist Girls' School (Secondary)", longitude: 103.8851201, latitude: 1.350967559},
+            {name: "Millennia Institute", longitude: 103.7415936, latitude: 1.350319296},
+            {name: "Seng Kang Primary School", longitude: 103.89976709999999, latitude: 1.389497404},
+            {name: "Pei Hwa Presbyterian Primary School", longitude: 103.77610820000001, latitude: 1.338055078},
+            {name: "New Town Primary School", longitude: 103.80010229999999, latitude: 1.2996418109999999},
+            {name: "Northoaks Primary School", longitude: 103.814197, latitude: 1.45660782},
+            {name: "Presbyterian High School", longitude: 103.8431494, latitude: 1.3820119430000002},
+            {name: "Damai Primary School", longitude: 103.9203394, latitude: 1.335163443},
+            {name: "Anglo-Chinese School (Primary)", longitude: 103.8356097, latitude: 1.318370546},
+            {name: "Tao Nan School", longitude: 103.9115532, latitude: 1.305285287},
+            {name: "Qifa Primary School", longitude: 103.7567432, latitude: 1.313251479},
+            {name: "Beacon Primary School", longitude: 103.7736319, latitude: 1.383949345},
+            {name: "Holy Innocents' High School", longitude: 103.8963988, latitude: 1.3715450880000002},
+            {name: "Greenridge Primary School", longitude: 103.7677945, latitude: 1.385889219},
+            {name: "Chij Saint Nicholas Girls' School", longitude: 103.8342533, latitude: 1.373476879},
+            {name: "Telok Kurau Primary School", longitude: 103.910934, latitude: 1.331045854},
+            {name: "Pioneer Primary School", longitude: 103.6950038, latitude: 1.348836175},
+            {name: "Assumption English School", longitude: 103.7666875, latitude: 1.3683816069999999},
+            {name: "Henry Park Primary School", longitude: 103.7842962, latitude: 1.316676462},
+            {name: "Boon Lay Garden Primary School", longitude: 103.7132809, latitude: 1.343178538},
+            {name: "Raffles Girls' School (Secondary)", longitude: 103.82895959999999, latitude: 1.311695028},
+            {name: "Edgefield Primary School", longitude: 103.9078476, latitude: 1.400091395},
+            {name: "Teck Ghee Primary School", longitude: 103.8509571, latitude: 1.3655878209999999},
+            {name: "Anchor Green Primary School", longitude: 103.88716540000001, latitude: 1.390370149},
+            {name: "Yio Chu Kang Primary School", longitude: 103.8856437, latitude: 1.377932643},
+            {name: "Geylang Methodist School (Secondary)", longitude: 103.8826734, latitude: 1.317670834},
+            {name: "North View Primary School", longitude: 103.8481908, latitude: 1.427523272},
+            {name: "Frontier Primary School", longitude: 103.6997017, latitude: 1.336412987},
+            {name: "East Coast Primary School", longitude: 103.91988740000001, latitude: 1.329101365},
+            {name: "Chung Cheng High School (Yishun)", longitude: 103.8373908, latitude: 1.419226036},
+            {name: "North Spring Primary School", longitude: 103.9032027, latitude: 1.387061465},
+            {name: "Kheng Cheng School", longitude: 103.8471483, latitude: 1.337331255},
+            {name: "Fengshan Primary School", longitude: 103.9317103, latitude: 1.329805988},
+            {name: "Red Swastika School", longitude: 103.9343323, latitude: 1.333242978},
+            {name: "Rulang Primary School", longitude: 103.718458, latitude: 1.3467386890000002},
+            {name: "West Spring Primary School", longitude: 103.76606590000002, latitude: 1.388951824},
+            {name: "Jurong Primary School", longitude: 103.7331566, latitude: 1.3486002030000002},
+            {name: "Saint Joseph'S Institution", longitude: 103.828499, latitude: 1.323653135},
+            {name: "Greendale Primary School", longitude: 103.912341, latitude: 1.39648761},
+            {name: "Anderson Primary School", longitude: 103.8413921, latitude: 1.384264294},
+            {name: "Chij Saint Joseph'S Convent", longitude: 103.902465, latitude: 1.3917522219999998},
+            {name: "Yu Neng Primary School", longitude: 103.9321503, latitude: 1.33388901},
+            {name: "Innova Primary School", longitude: 103.7906075, latitude: 1.4289670069999998},
+            {name: "Northlight School", longitude: 103.85575959999998, latitude: 1.319100216},
+            {name: "Cantonment Primary School", longitude: 103.83996259999999, latitude: 1.275472526},
+            {name: "Gan Eng Seng School", longitude: 103.8237337, latitude: 1.289071145},
+            {name: "Canberra Primary School", longitude: 103.8158395, latitude: 1.451304676},
+            {name: "Coral Primary School", longitude: 103.9506486, latitude: 1.3684257709999998},
+            {name: "Xishan Primary School", longitude: 103.8377553, latitude: 1.4334718690000001},
+            {name: "Chua Chu Kang Primary School", longitude: 103.7417593, latitude: 1.377674386},
+            {name: "Bukit Panjang Primary School", longitude: 103.7693749, latitude: 1.373621793},
+            {name: "Greenwood Primary School", longitude: 103.8047256, latitude: 1.439899583},
+            {name: "Endeavour Primary School", longitude: 103.8174362, latitude: 1.454038375},
+            {name: "Singapore Chinese Girls' Primary School", longitude: 103.8280814, latitude: 1.321072169},
+            {name: "Admiralty Primary School", longitude: 103.80004009999999, latitude: 1.44263479},
+            {name: "Blangah Rise Primary School", longitude: 103.8086285, latitude: 1.276120479},
+            {name: "West View Primary School", longitude: 103.76024040000001, latitude: 1.38367582},
+            {name: "Canossa Convent Primary School", longitude: 103.88220129999999, latitude: 1.3262878359999999},
+            {name: "Wellington Primary School", longitude: 103.82230609999999, latitude: 1.4519158580000002},
+            {name: "Chij Our Lady Queen Of Peace", longitude: 103.7674122, latitude: 1.366603669},
+            {name: "Da Qiao Primary School", longitude: 103.8589936, latitude: 1.371811523},
+            {name: "Mee Toh School", longitude: 103.9085895, latitude: 1.394618454},
+            {name: "Tampines Primary School", longitude: 103.94400470000001, latitude: 1.349778708},
+            {name: "Rivervale Primary School", longitude: 103.90455949999999, latitude: 1.3934140259999999},
+            {name: "Chij Secondary (Toa Payoh)", longitude: 103.8432716, latitude: 1.3324607990000001},
+            {name: "Angsana Primary School", longitude: 103.9518081, latitude: 1.348559747},
+            {name: "Sengkang Green Primary School", longitude: 103.87521770000001, latitude: 1.3928460669999998},
+            {name: "Chij Our Lady Of The Nativity", longitude: 103.89758690000001, latitude: 1.3732965369999999},
+            {name: "Opera Estate Primary School", longitude: 103.9237883, latitude: 1.319319144},
+            {name: "Townsville Primary School", longitude: 103.853826, latitude: 1.360032637},
+            {name: "Nan Hua High School", longitude: 103.76856120000001, latitude: 1.308094991},
+            {name: "Chij (Kellock)", longitude: 103.80026459999999, latitude: 1.302050821},
+            {name: "Horizon Primary School", longitude: 103.91340490000002, latitude: 1.399550034},
+            {name: "Eunos Primary School", longitude: 103.90454129999999, latitude: 1.324476299},
+            {name: "West Grove Primary School", longitude: 103.6992864, latitude: 1.344879056},
+            {name: "Chij Katong Convent", longitude: 103.9171444, latitude: 1.306442538},
+            {name: "Zhangde Primary School", longitude: 103.8259519, latitude: 1.284211533},
+            {name: "Woodlands Ring Primary School", longitude: 103.79743570000001, latitude: 1.434952293},
+            {name: "Saint Stephen'S School", longitude: 103.91725809999998, latitude: 1.318789973},
+            {name: "Xinmin Primary School", longitude: 103.8830808, latitude: 1.371395489},
+            {name: "River Valley Primary School", longitude: 103.8362937, latitude: 1.2938177359999998},
+            {name: "Geylang Methodist School (Primary)", longitude: 103.88384570000001, latitude: 1.317591268},
+            {name: "Chij Primary (Toa Payoh)", longitude: 103.8418473, latitude: 1.332752647},
+            {name: "Lakeside Primary School", longitude: 103.7180895, latitude: 1.338203977},
+            {name: "Nan Chiau Primary School", longitude: 103.8911809, latitude: 1.392211499},
+            {name: "Loyang Primary School", longitude: 103.9558495, latitude: 1.3709169980000002},
+            {name: "Unity Primary School", longitude: 103.74682259999999, latitude: 1.402854819},
+            {name: "Princess Elizabeth Primary School", longitude: 103.7410196, latitude: 1.3492035130000002},
+            {name: "Shuqun Primary School", longitude: 103.7215237, latitude: 1.347653114},
+            {name: "Xingnan Primary School", longitude: 103.6879503, latitude: 1.342547449},
+            {name: "Yew Tee Primary School", longitude: 103.7509854, latitude: 1.396765962},
+            {name: "Peiying Primary School", longitude: 103.83041709999999, latitude: 1.417233397},
+            {name: "Ang Mo Kio Primary School", longitude: 103.8396309, latitude: 1.3693217659999999},
+            {name: "Paya Lebar Methodist Girls' School (Primary)", longitude: 103.8849713, latitude: 1.349472763},
+            {name: "Si Ling Primary School", longitude: 103.78603509999999, latitude: 1.4324093569999998},
+            {name: "Kong Hwa School", longitude: 103.888352, latitude: 1.31099674},
+            {name: "Pei Tong Primary School", longitude: 103.76757740000001, latitude: 1.31618396},
+            {name: "Hong Wen School", longitude: 103.8576285, latitude: 1.32176},
+            {name: "Punggol Green Primary School", longitude: 103.89880129999999, latitude: 1.401872206},
+            {name: "Bendemeer Primary School", longitude: 103.8654042, latitude: 1.321812508},
+            {name: "Waterway Primary School", longitude: 103.9186216, latitude: 1.398828006},
+            {name: "Singapore Chinese Girls' School", longitude: 103.8281921, latitude: 1.321045082},
+            {name: "Queenstown Primary School", longitude: 103.80754859999999, latitude: 1.29559365},
+            {name: "Chij Saint Theresa'S Convent", longitude: 103.8224407, latitude: 1.275351775},
+            {name: "Maris Stella High School", longitude: 103.8778525, latitude: 1.341394734},
+            {name: "Oasis Primary School", longitude: 103.91112059999999, latitude: 1.404624132},
+            {name: "Ngee Ann Primary School", longitude: 103.917463, latitude: 1.305525059},
+            {name: "Chongzheng Primary School", longitude: 103.9513995, latitude: 1.350707392},
+            {name: "North Vista Primary School", longitude: 103.8959619, latitude: 1.38282243},
+            {name: "Crescent Girls' School", longitude: 103.8175445, latitude: 1.29331947},
+            {name: "Jing Shan Primary School", longitude: 103.8521322, latitude: 1.37223291},
+            {name: "School Of Science And Technology Singapore", longitude: 103.7740115, latitude: 1.312928106},
+            {name: "Zhonghua Primary School", longitude: 103.86976240000001, latitude: 1.360203297},
+            {name: "Nanyang Primary School", longitude: 103.8077502, latitude: 1.320847499},
+            {name: "Fernvale Primary School", longitude: 103.8744455, latitude: 1.39030228},
+            {name: "East Spring Primary School", longitude: 103.96167679999999, latitude: 1.352684007},
+            {name: "Park View Primary School", longitude: 103.9395417, latitude: 1.3773806990000002},
+            {name: "Pasir Ris Primary School", longitude: 103.9628072, latitude: 1.3724187019999998},
+            {name: "Woodlands Primary School", longitude: 103.79157049999999, latitude: 1.436551086},
+            {name: "Tanjong Katong Girls' School", longitude: 103.9270308, latitude: 1.32203912},
+            {name: "Gan Eng Seng Primary School", longitude: 103.8155474, latitude: 1.285595165},
+            {name: "Fairfield Methodist School (Secondary)", longitude: 103.78409959999999, latitude: 1.301633744},
+            {name: "Springdale Primary School", longitude: 103.8899262, latitude: 1.3946701030000002},
+            {name: "Cedar Primary School", longitude: 103.8756208, latitude: 1.335588426},
+            {name: "Hai Sing Catholic School", longitude: 103.9549579, latitude: 1.374346412},
+            {name: "Punggol Cove Primary School", longitude: 103.89880459999999, latitude: 1.411598919},
+            {name: "Saint Anthony'S Canossian Primary School", longitude: 103.9412349, latitude: 1.334725373},
+            {name: "Qihua Primary School", longitude: 103.78833979999999, latitude: 1.442035966},
+            {name: "Fairfield Methodist School (Primary)", longitude: 103.7854383, latitude: 1.300540825},
+            {name: "Mayflower Primary School", longitude: 103.84325279999999, latitude: 1.376376835},
+            {name: "Anglican High School", longitude: 103.9418579, latitude: 1.331180405},
+            {name: "Fuchun Primary School", longitude: 103.7781929, latitude: 1.4304799080000001},
+            {name: "Westwood Primary School", longitude: 103.7005342, latitude: 1.347184566},
+            {name: "Farrer Park Primary School", longitude: 103.8507662, latitude: 1.31236856},
+            {name: "Palm View Primary School", longitude: 103.89135470000001, latitude: 1.38376923},
+            {name: "Poi Ching School", longitude: 103.93524649999999, latitude: 1.3576512230000002},
+            {name: "Assumption Pathway School", longitude: 103.76595909999999, latitude: 1.369670704},
+            {name: "Anglo-Chinese School (Independent)", longitude: 103.78036340000001, latitude: 1.303704093},
+            {name: "Juying Primary School", longitude: 103.6877696, latitude: 1.339022647},
+            {name: "Temasek Primary School", longitude: 103.9455907, latitude: 1.3177067759999999},
+            {name: "Riverside Primary School", longitude: 103.80183199999999, latitude: 1.4470473430000002},
+            {name: "Woodgrove Primary School", longitude: 103.7906044, latitude: 1.433103402},
+            {name: "Jurong West Primary School", longitude: 103.6988037, latitude: 1.339175198},
+            {name: "Radin Mas Primary School", longitude: 103.82418829999999, latitude: 1.274958236},
+            {name: "Bedok Green Primary School", longitude: 103.93787900000001, latitude: 1.323445933},
+            {name: "Fuhua Primary School", longitude: 103.7361037, latitude: 1.336503948},
+            {name: "Keming Primary School", longitude: 103.7564505, latitude: 1.345528274},
+            {name: "Lianhua Primary School", longitude: 103.7541658, latitude: 1.354241911},
+            {name: "Middleton International School (Tampines)", longitude: 103.94278082747316, latitude: 1.3426789332840117},
+            {name: "Meridian Primary School", longitude: 103.93488909999999, latitude: 1.375528317},
+            {name: "Corporation Primary School", longitude: 103.7075937, latitude: 1.3509971680000001},
+            {name: "Zhenghua Primary School", longitude: 103.7693135, latitude: 1.379548875},
+            {name: "Northland Primary School", longitude: 103.84092840000001, latitude: 1.4209698990000001},
+            {name: "Tampines North Primary School", longitude: 103.94872579999999, latitude: 1.360476415},
+            {name: "Dunman High School", longitude: 103.8829416, latitude: 1.299961903},
+            {name: "Compassvale Primary School", longitude: 103.8978122, latitude: 1.394445296},
+            {name: "Marymount Convent School", longitude: 103.84002109999999, latitude: 1.34036677},
+            {name: "Bukit Timah Primary School", longitude: 103.76724329999999, latitude: 1.3375186000000001},
+            {name: "Stamford Primary School", longitude: 103.8574535, latitude: 1.303456385},
+            {name: "Holy Innocents' Primary School", longitude: 103.8571869, latitude: 1.375021298},
+            {name: "Saint Anthony'S Primary School", longitude: 103.7492519, latitude: 1.3641167630000002},
+            {name: "Singapore Sports School", longitude: 103.7894448, latitude: 1.426411406},
+            {name: "River Valley High School", longitude: 103.7090222, latitude: 1.344078012},
+            {name: "Saint Gabriel'S Primary School", longitude: 103.8623277, latitude: 1.349340577},
+            {name: "Chongfu School", longitude: 103.8393092, latitude: 1.438395629},
+            {name: "Raffles Girls' Primary School", longitude: 103.8064429, latitude: 1.32940426},
+            {name: "Gongshang Primary School", longitude: 103.9491161, latitude: 1.35723721},
+            {name: "Bukit View Primary School", longitude: 103.75366600000001, latitude: 1.345860548},
+            {name: "Rosyth School", longitude: 103.8750015, latitude: 1.372890675},
+            {name: "Ai Tong School", longitude: 103.8330203, latitude: 1.360583434},
+            {name: "Yangzheng Primary School", longitude: 103.8683495, latitude: 1.348973753},
+            {name: "Teck Whye Primary School", longitude: 103.75329190000001, latitude: 1.383649968},
+            {name: "Marsiling Primary School", longitude: 103.773643, latitude: 1.43383904},
+            {name: "Guangyang Primary School", longitude: 103.8494532, latitude: 1.345690115},
+            {name: "Anglo-Chinese School (Junior)", longitude: 103.8409551, latitude: 1.309351226},
+            {name: "Xinghua Primary School", longitude: 103.890465, latitude: 1.3579089359999998},
+            {name: "Junyuan Primary School", longitude: 103.93922049999999, latitude: 1.3478705119999999},
+            {name: "Jiemin Primary School", longitude: 103.8304279, latitude: 1.427686204},
+            {name: "Nanyang Girls' High School", longitude: 103.802421, latitude: 1.330583267},
+            {name: "Ahmad Ibrahim Primary School", longitude: 103.83294240000001, latitude: 1.433152715},
+            {name: "Casuarina Primary School", longitude: 103.9570203, latitude: 1.37246064},
+            {name: "Nan Hua Primary School", longitude: 103.76110820000001, latitude: 1.319215614},
+            {name: "Chung Cheng High School (Main)", longitude: 103.89165320000001, latitude: 1.305091548},
+            {name: "Macpherson Primary School", longitude: 103.8816248, latitude: 1.324391503},
+            {name: "White Sands Primary School", longitude: 103.9609189, latitude: 1.3655571469999999},
+            {name: "East View Primary School", longitude: 103.93965, latitude: 1.3468939819999999},
+            {name: "Alexandra Primary School", longitude: 103.8244247, latitude: 1.291334392},
+            {name: "Anglo-Chinese School (Barker Road)", longitude: 103.8357727, latitude: 1.319616492},
+            {name: "Catholic High School", longitude: 103.84487469999999, latitude: 1.354723075},
+            {name: "Chij Our Lady Of Good Counsel", longitude: 103.8640094, latitude: 1.3574295230000002},
+            {name: "Bukit Panjang Govt. High School", longitude: 103.7383539, latitude: 1.3822255719999998},
+            {name: "Saint Joseph'S Institution Junior", longitude: 103.84561190000001, latitude: 1.31772861},
+            {name: "Nan Chiau High School", longitude: 103.89000440000001, latitude: 1.388795825},
+            {name: "Elias Park Primary School", longitude: 103.94512809999999, latitude: 1.374512695},
+            {name: "South View Primary School", longitude: 103.74627579999999, latitude: 1.381666644},
+            {name: "Chij (Katong) Primary", longitude: 103.9111056, latitude: 1.306485353},
+            {name: "Punggol Primary School", longitude: 103.8945069, latitude: 1.377794512},
+            {name: "Punggol View Primary School", longitude: 103.9051564, latitude: 1.405145826},
+            {name: "Haig Girls' School", longitude: 103.9391574, latitude: 1.323667966},
+            {name: "Clementi Primary School", longitude: 103.7629667, latitude: 1.3150573079999999},
+            {name: "Montfort Junior School", longitude: 103.8893078, latitude: 1.373824441},
+            {name: "Dazhong Primary School", longitude: 103.74847209999999, latitude: 1.359179745},
+            {name: "Naval Base Primary School", longitude: 103.8387941, latitude: 1.416306632},
+            {name: "Huamin Primary School", longitude: 103.8442402, latitude: 1.426972845},
+            {name: "Yishun Primary School", longitude: 103.83408709999999, latitude: 1.433386029},
+            {name: "Hougang Primary School", longitude: 103.8808073, latitude: 1.3773824940000001},
+        ];
+
+        function createLabel(school) {
+            return L.divIcon({
+                className: 'school-label',
+                html: `${school.name}`,
+                iconSize: null,
+                iconAnchor: [0, 0],
+                popupAnchor: [0, 0]
+            });
+        }
+
+        function updateLabelVisibility() {
+            const bounds = map.getBounds();
+            const visibleLabels = labels.filter(label => bounds.contains(label.getLatLng()));
+            
+            visibleLabels.sort((a, b) => b.getLatLng().lat - a.getLatLng().lat);
+            
+            const labelPositions = [];
+            visibleLabels.forEach(label => {
+                const pos = map.latLngToContainerPoint(label.getLatLng());
+                const labelHeight = 20;
+                
+                const hasOverlap = labelPositions.some(existingPos => 
+                    Math.abs(pos.y - existingPos.y) < labelHeight &&
+                    Math.abs(pos.x - existingPos.x) < 100
+                );
+                
+                if (hasOverlap) {
+                    label.getElement().style.display = 'none';
+                } else {
+                    label.getElement().style.display = '';
+                    labelPositions.push(pos);
+                }
+            });
+        }
+
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371;
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                Math.sin(dLon/2) * Math.sin(dLon/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return R * c;
+        }
+
+        async function searchAddress() {
+            const address = document.getElementById('address').value;
+            const response = await fetch(`https://www.onemap.gov.sg/api/common/elastic/search?searchVal=${encodeURIComponent(address)}&returnGeom=Y&getAddrDetails=Y&pageNum=1`);
+            const data = await response.json();
+
+            if (data.results && data.results.length > 0) {
+                const location = data.results[0];
+                const lat = parseFloat(location.LATITUDE);
+                const lng = parseFloat(location.LONGITUDE);
+
+                markers.forEach(marker => map.removeLayer(marker));
+                labels.forEach(label => map.removeLayer(label));
+                markers = [];
+                labels = [];
+
+                const locationMarker = L.marker([lat, lng], {icon: homeIcon}).addTo(map);
+                locationMarker.bindPopup(`<b>Your Location</b><br>${location.ADDRESS}`).openPopup();
+                markers.push(locationMarker);
+
+                map.setView([lat, lng], 14);
+
+                const schoolsWithDistance = schools.map(school => ({
+                    ...school,
+                    distance: calculateDistance(lat, lng, school.latitude, school.longitude)
+                }));
+
+                const schoolsWithin1km = schoolsWithDistance
+                    .filter(school => school.distance <= 1)
+                    .sort((a, b) => a.distance - b.distance);
+
+                const schoolsWithin2km = schoolsWithDistance
+                    .filter(school => school.distance > 1 && school.distance <= 2)
+                    .sort((a, b) => a.distance - b.distance);
+
+                displaySchools('schools1km', schoolsWithin1km);
+                displaySchools('schools2km', schoolsWithin2km);
+
+                schoolsWithin1km.forEach(school => {
+                    const schoolMarker = L.marker([school.latitude, school.longitude], {
+                        icon: getSchoolIcon('#2196F3', map.getZoom())
+                    }).addTo(map);
+                    
+                    const encodedSchoolName = encodeURIComponent(school.name);
+                    const ohmyhomeUrl = `https://ohmyhome.com/en-sg/listing-results/?filterType=HOME_SALE&query=${encodedSchoolName}`;
+                    
+                    const label = L.marker([school.latitude + 0.0005, school.longitude], {
+                        icon: createLabel(school),
+                        zIndexOffset: -1000
+                    }).addTo(map);
+
+                    schoolMarker.bindPopup(`
+                        <b>${school.name}</b><br>
+                        Distance: ${school.distance.toFixed(2)} km<br>
+                        Coordinates: ${school.latitude}, ${school.longitude}<br>
+                        <a href="${ohmyhomeUrl}" target="_blank">View nearby properties</a>
+                    `);
+
+                    label.on('click', () => {
+                        window.open(ohmyhomeUrl, '_blank');
+                    });
+
+                    label.getElement().style.cursor = 'pointer';
+
+                    markers.push(schoolMarker);
+                    labels.push(label);
+                });
+
+                schoolsWithin2km.forEach(school => {
+                    const schoolMarker = L.marker([school.latitude, school.longitude], {
+                        icon: getSchoolIcon('#FF9800', map.getZoom())
+                    }).addTo(map);
+                    
+                    const encodedSchoolName = encodeURIComponent(school.name);
+                    const ohmyhomeUrl = `https://ohmyhome.com/en-sg/listing-results/?filterType=HOME_SALE&query=${encodedSchoolName}`;
+                    
+                    const label = L.marker([school.latitude + 0.0005, school.longitude], {
+                        icon: createLabel(school),
+                        zIndexOffset: -1000
+                    }).addTo(map);
+
+                    schoolMarker.bindPopup(`
+                        <b>${school.name}</b><br>
+                        Distance: ${school.distance.toFixed(2)} km<br>
+                        Coordinates: ${school.latitude}, ${school.longitude}<br>
+                        <a href="${ohmyhomeUrl}" target="_blank">View nearby properties</a>
+                    `);
+
+                    label.on('click', () => {
+                        window.open(ohmyhomeUrl, '_blank');
+                    });
+
+                    label.getElement().style.cursor = 'pointer';
+
+                    markers.push(schoolMarker);
+                    labels.push(label);
+                });
+
+                updateLabelVisibility();
+            }
+        }
+
+        function displaySchools(elementId, schools) {
+            const container = document.getElementById(elementId);
+            if (schools.length === 0) {
+                container.innerHTML = '<p>No schools found</p>';
+                return;
+            }
+
+            const table = `
+                <table>
+                    <tr>
+                        <th>School</th>
+                        <th>Distance (km)</th>
+                    </tr>
+                    ${schools.map(school => {
+                        const encodedSchoolName = encodeURIComponent(school.name);
+                        const ohmyhomeUrl = `https://ohmyhome.com/en-sg/listing-results/?filterType=HOME_SALE&query=${encodedSchoolName}`;
+                        return `
+                            <tr>
+                                <td><a href="${ohmyhomeUrl}" target="_blank">${school.name}</a></td>
+                                <td>${school.distance.toFixed(2)}</td>
+                            </tr>
+                        `;
+                    }).join('')}
+                </table>
+            `;
+            container.innerHTML = table;
+        }
+
+        map.on('zoomend moveend', () => {
+            markers.forEach(marker => {
+                if (marker.options.icon && marker.options.icon.options.html.includes('fa-school')) {
+                    const color = marker.options.icon.options.html.includes('#2196F3') ? '#2196F3' : '#FF9800';
+                    marker.setIcon(getSchoolIcon(color, map.getZoom()));
+                }
+            });
+            updateLabelVisibility();
+        });
+    </script>
+</body>
+</html>

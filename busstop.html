@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Singapore Bus Timings</title>
+    <style>
+        body { font-family: sans-serif; }
+        .container { width: 80%; margin: auto; padding-top: 20px; }
+        input[type="text"] { width: 70%; padding: 10px; margin-right: 10px; }
+        button { padding: 10px 15px; cursor: pointer; }
+        #search-results button { display: block; margin-bottom: 5px; width: 100%; text-align: left; }
+        #bus-timings { margin-top: 20px; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border: 1px solid black; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        .error { color: red; }
+        .minutes { color: green; }
+        .load-LSD { color: orange; } /* Lightly Loaded */
+        .load-FSD { color: yellow; } /* Moderately Loaded */
+        .load-SED { color: red; }   /* Severely Loaded */
+        .feature-WAB { font-weight: bold; } /* Wheelchair Accessible */
+        .type-SD { /* Single Deck */ }
+        .type-DD { font-style: italic; } /* Double Deck */
+        .type-BD { text-decoration: underline; } /* Bendy */
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Singapore Bus Timings</h1>
+        <div id="search-form">
+            <input type="text" id="address-input" placeholder="Enter Address to display nearby bustops">
+            <button id="search-button">Search</button>
+        </div>
+        <div id="search-results">
+            <!-- Search results will be displayed here -->
+        </div>
+        <div id="bus-timings">
+            <!-- Bus timings table will be displayed here -->
+        </div>
+        <div id="error-message" class="error" style="display:none;"></div>
+        <div id="back-button-container" style="margin-top: 10px; display:none;">
+            <button id="back-button">Back</button>
+        </div>
+    </div>
+
+    <script>
+        const ltaApiKey = "ci3N9yskQ+u28iUE9zvNxw=="; // **API Key is in client-side JS - see security note below**
+        let busStopsData = [];
+        let selectedBusStop = null;
+        const searchResultsDiv = document.getElementById('search-results');
+        const busTimingsDiv = document.getElementById('bus-timings');
+        const errorMessageDiv = document.getElementById('error-message');
+        const backButtonContainer = document.getElementById('back-button-container');
+        const backButton = document.getElementById('back-button');
+
+        function displayError(message) {
+            errorMessageDiv.textContent = message;
+            errorMessageDiv.style.display = 'block';
+            console.error("Error displayed to user:", message);
+        }
+
+        function clearError() {
+            errorMessageDiv.textContent = '';
+            errorMessageDiv.style.display = 'none';
+        }
+
+        function minutesFromNow(timestamp) {
+            if (!timestamp) {
+                return "Invalid timestamp";
+            }
+            try {
+                const currentTime = new Date();
+                const estimatedTime = new Date(timestamp);
+                const delta = estimatedTime - currentTime;
+                return Math.floor(delta / (1000 * 60));
+            } catch (ValueError) {
+                return "Invalid timestamp";
+            }
+        }
+
+        function fetchBusArrivalData(busStopCode) {
+            clearError();
+            // **Using the new HTTPS endpoint! - Single file solution is now secure on HTTPS pages**
+            const url = "https://datamall2.mytransport.sg/ltaodataservice/v3/BusArrival";
+            const params = new URLSearchParams({
+                "BusStopCode": busStopCode
+            });
+            const headers = {
+                "AccountKey": ltaApiKey
+            };
+
+            return fetch(`${url}?${params}`, { headers: headers })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (!data.Services) {
+                        throw new Error("No services data found in the response");
+                    }
+                    const services = data.Services;
+                    const rows = [];
+                    services.forEach(service => {
+                        const serviceNo = service.ServiceNo;
+                        const nextBus1 = service.NextBus || {};
+                        const nextBus2 = service.NextBus2 || {};
+                        const nextBus3 = service.NextBus3 || {};
+
+                        const row = {
+                            "Service Number": serviceNo,
+                            "Next Bus 1": `${minutesFromNow(nextBus1.EstimatedArrival)} mins, <span class='load-${nextBus1.Load || 'N/A'}'>${nextBus1.Load || 'N/A'}</span>, <span class='feature-${nextBus1.Feature || 'N/A'}'>${nextBus1.Feature || 'N/A'}</span>, <span class='type-${nextBus1.Type || 'N/A'}'>${nextBus1.Type || 'N/A'}</span>`,
+                            "Next Bus 2": `${minutesFromNow(nextBus2.EstimatedArrival)} mins, <span class='load-${nextBus2.Load || 'N/A'}'>${nextBus2.Load || 'N/A'}</span>, <span class='feature-${nextBus2.Feature || 'N/A'}'>${nextBus2.Feature || 'N/A'}</span>, <span class='type-${nextBus2.Type || 'N/A'}'>${nextBus2.Type || 'N/A'}</span>`,
+                            "Next Bus 3": `${minutesFromNow(nextBus3.EstimatedArrival)} mins, <span class='load-${nextBus3.Load || 'N/A'}'>${nextBus3.Load || 'N/A'}</span>, <span class='feature-${nextBus3.Feature || 'N/A'}'>${nextBus3.Feature || 'N/A'}</span>, <span class='type-${nextBus3.Type || 'N/A'}'>${nextBus3.Type || 'N/A'}</span>`
+                        };
+                        rows.push(row);
+                    });
+                    return rows;
+                })
+                .catch(error => {
+                    console.error("Error fetching bus arrival data:", error);
+                    displayError("Failed to fetch bus arrival data.");
+                    return null;
+                });
+        }
+
+        function queryOneMap(address) {
+            clearError();
+            const baseUrl = "https://www.onemap.gov.sg/api/common/elastic/search";
+            const params = new URLSearchParams({
+                "searchVal": address,
+                "returnGeom": "Y",
+                "getAddrDetails": "Y"
+            });
+
+            return fetch(`${baseUrl}?${params}`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.found > 0) {
+                        const result = data.results[0];
+                        return {
+                            address: result.ADDRESS,
+                            latitude: parseFloat(result.LATITUDE),
+                            longitude: parseFloat(result.LONGITUDE)
+                        };
+                    } else {
+                        return null;
+                    }
+                })
+                .catch(error => {
+                    console.error("Error querying OneMap:", error);
+                    displayError("Failed to query address from OneMap.");
+                    return null;
+                });
+        }
+
+        function haversineVector(lat1, lon1, lat2, lon2) {
+            const R = 6371; // Earth's radius in kilometers
+            const toRadians = angle => angle * Math.PI / 180;
+
+            lat1 = toRadians(lat1);
+            lon1 = toRadians(lon1);
+            lat2 = toRadians(lat2);
+            lon2 = toRadians(lon2);
+
+            const dlat = lat2 - lat1;
+            const dlon = lon2 - lon1;
+
+            const a = Math.sin(dlat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dlon / 2) ** 2;
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+            return R * c * 1000; // Distance in meters
+        }
+
+        function getNearbyDescriptions(targetLat, targetLon, maxDistance = 500) {
+            if (!busStopsData || busStopsData.length === 0) {
+                displayError("Bus stop data not loaded yet.");
+                return Promise.resolve([]);
+            }
+
+            return new Promise(resolve => {
+                const nearbyPoints = [];
+                busStopsData.forEach(stop => {
+                    const distance = haversineVector(targetLat, targetLon, parseFloat(stop.Latitude), parseFloat(stop.Longitude));
+                    if (distance <= maxDistance) {
+                        nearbyPoints.push({...stop, distance: Math.round(distance)});
+                    }
+                });
+                nearbyPoints.sort((a, b) => a.distance - b.distance);
+                resolve(nearbyPoints);
+            });
+        }
+
+        function displaySearchResults(nearbyStops) {
+            searchResultsDiv.innerHTML = "";
+            if (nearbyStops.length === 0) {
+                searchResultsDiv.textContent = "No nearby bus stops found.";
+                return;
+            }
+
+            nearbyStops.forEach(stop => {
+                const button = document.createElement('button');
+                button.textContent = `${stop.Description} (${stop.distance} meters)`;
+                button.addEventListener('click', () => {
+                    selectedBusStop = stop;
+                    displayBusTimings(stop.BusStopCode, stop.Description, stop.distance);
+                });
+                searchResultsDiv.appendChild(button);
+            });
+        }
+
+        function displayBusTimings(busStopCode, description, distance) {
+            searchResultsDiv.style.display = 'none';
+            busTimingsDiv.style.display = 'block';
+            backButtonContainer.style.display = 'block';
+            busTimingsDiv.innerHTML = `<h3>Bus Stop Code ${busStopCode}, Description: ${description}, Distance: ${distance} meters</h3>`;
+
+            fetchBusArrivalData(busStopCode).then(rows => {
+                if (rows) {
+                    let tableHTML = '<table><thead><tr><th>Service Number</th><th>Next Bus 1</th><th>Next Bus 2</th><th>Next Bus 3</th></tr></thead><tbody>';
+                    rows.forEach(row => {
+                        tableHTML += `<tr><td>${row["Service Number"]}</td><td>${row["Next Bus 1"]}</td><td>${row["Next Bus 2"]}</td><td>${row["Next Bus 3"]}</td></tr>`;
+                    });
+                    tableHTML += '</tbody></table>';
+                    busTimingsDiv.innerHTML += tableHTML;
+                }
+            });
+        }
+
+        function resetToSearch() {
+            selectedBusStop = null;
+            searchResultsDiv.style.display = 'block';
+            busTimingsDiv.style.display = 'none';
+            backButtonContainer.style.display = 'none';
+            busTimingsDiv.innerHTML = '';
+            searchResultsDiv.innerHTML = '';
+            document.getElementById('address-input').value = '';
+        }
+
+
+        document.getElementById('search-button').addEventListener('click', function() {
+            const address = document.getElementById('address-input').value;
+            if (address) {
+                queryOneMap(address).then(result => {
+                    if (result) {
+                        getNearbyDescriptions(result.latitude, result.longitude).then(nearbyStops => {
+                            displaySearchResults(nearbyStops);
+                        });
+                    } else {
+                        displayError("No results found for the provided address.");
+                        searchResultsDiv.innerHTML = "";
+                    }
+                });
+            } else {
+                displayError("Please enter an address.");
+            }
+        });
+
+        backButton.addEventListener('click', resetToSearch);
+
+
+        // Load bus stop data on page load
+        fetch('https://vairavank.github.io/bus_stops.json')
+            .then(response => {
+                if (!response.ok) {
+                    console.error("HTTP error fetching bus stop data:", response.status, response.statusText);
+                    displayError(`Failed to load bus stop data. HTTP error! status: ${response.status} ${response.statusText}`);
+                    throw new Error(`HTTP error! status: ${response.status} ${response.statusText}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                busStopsData = data;
+                console.log("Bus stop data loaded successfully:", busStopsData.length, "stops");
+            })
+            .catch(error => {
+                console.error("Error loading bus stop data:", error);
+                displayError("Failed to load bus stop data. See console for details.");
+            });
+
+        // Initial state setup
+        searchResultsDiv.style.display = 'block';
+        busTimingsDiv.style.display = 'none';
+        backButtonContainer.style.display = 'none';
+
+    </script>
+</body>
+</html>
